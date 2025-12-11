@@ -1,0 +1,136 @@
+.cytech-calculator-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.cytech-calculator {
+    width: 100%;
+    max-width: 500px;
+    margin: 0;
+    padding: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.calculator-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.calculator-description {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.cytech-calculator input,
+.cytech-calculator select {
+    width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 16px;
+    background-color: #fff;
+}
+
+.cytech-calculator select {
+    cursor: pointer;
+}
+
+.cytech-calculator label {
+    display: block;
+    margin: 8px 0;
+    font-weight: 500;
+    font-size: 15px;
+    color: #333;
+}
+
+.cytech-calculator button {
+    width: 100%;
+    padding: 15px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 15px 0;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.cytech-calculator button:hover {
+    background-color: #45a049;
+}
+
+.cytech-requirements {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.cytech-requirements h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.cytech-requirements ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.cytech-requirements li {
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #555;
+}
+
+.cytech-summary {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 4px;
+    margin-top: 15px;
+    border-left: 4px solid #4CAF50;
+}
+
+.cytech-summary h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 18px;
+    margin-bottom: 15px;
+}
+
+.cytech-summary p {
+    margin: 8px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    font-weight: 500;
+}
+
+@media (max-width: 767px) {
+    .cytech-calculator {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .cytech-calculator input,
+    .cytech-calculator select {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+}
