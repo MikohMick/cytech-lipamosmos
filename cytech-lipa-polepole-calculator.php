@@ -15,6 +15,276 @@ class Simple_Calculator_Plugin {
     public function __construct() {
         add_filter('woocommerce_short_description', array($this, 'add_calculator'), 10, 1);
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+
+        // Admin settings
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_init', array($this, 'register_settings'));
+
+        // Price display override
+        add_filter('woocommerce_get_price_html', array($this, 'modify_price_display'), 10, 2);
+    }
+
+    // Add admin menu
+    public function add_admin_menu() {
+        add_menu_page(
+            'Lipa Polepole Settings',
+            'Lipa Polepole',
+            'manage_options',
+            'lipa-polepole-settings',
+            array($this, 'settings_page'),
+            'dashicons-calculator',
+            56
+        );
+    }
+
+    // Register settings
+    public function register_settings() {
+        register_setting('lipa_polepole_settings', 'lipa_polepole_categories');
+        register_setting('lipa_polepole_settings', 'lipa_polepole_whatsapp');
+        register_setting('lipa_polepole_settings', 'lipa_polepole_payment_plans');
+    }
+
+    // Get default payment plans
+    private function get_default_payment_plans() {
+        return array(
+            array('weeks' => 2, 'interest' => 25, 'deposit' => 40),
+            array('weeks' => 4, 'interest' => 30, 'deposit' => 40),
+            array('weeks' => 8, 'interest' => 40, 'deposit' => 40),
+            array('weeks' => 12, 'interest' => 50, 'deposit' => 40),
+            array('weeks' => 16, 'interest' => 60, 'deposit' => 50),
+            array('weeks' => 20, 'interest' => 70, 'deposit' => 50),
+            array('weeks' => 24, 'interest' => 80, 'deposit' => 50),
+        );
+    }
+
+    // Settings page HTML
+    public function settings_page() {
+        // Handle form submission
+        if (isset($_POST['lipa_polepole_save_settings']) && check_admin_referer('lipa_polepole_settings_nonce')) {
+            // Save categories
+            $categories = isset($_POST['lipa_polepole_categories']) ? array_map('intval', $_POST['lipa_polepole_categories']) : array();
+            update_option('lipa_polepole_categories', $categories);
+
+            // Save WhatsApp number
+            $whatsapp = isset($_POST['lipa_polepole_whatsapp']) ? sanitize_text_field($_POST['lipa_polepole_whatsapp']) : '';
+            update_option('lipa_polepole_whatsapp', $whatsapp);
+
+            // Save payment plans
+            $payment_plans = array();
+            if (isset($_POST['payment_plans']) && is_array($_POST['payment_plans'])) {
+                foreach ($_POST['payment_plans'] as $plan) {
+                    $payment_plans[] = array(
+                        'weeks' => intval($plan['weeks']),
+                        'interest' => intval($plan['interest']),
+                        'deposit' => intval($plan['deposit']),
+                    );
+                }
+            }
+            update_option('lipa_polepole_payment_plans', $payment_plans);
+
+            echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
+        }
+
+        // Get current settings
+        $selected_categories = get_option('lipa_polepole_categories', array());
+        $whatsapp = get_option('lipa_polepole_whatsapp', '254726166061');
+        $payment_plans = get_option('lipa_polepole_payment_plans', $this->get_default_payment_plans());
+
+        // Get all product categories
+        $categories = get_terms(array(
+            'taxonomy' => 'product_cat',
+            'hide_empty' => false,
+        ));
+
+        ?>
+        <div class="wrap">
+            <h1>Lipa Polepole Calculator Settings</h1>
+
+            <form method="post" action="">
+                <?php wp_nonce_field('lipa_polepole_settings_nonce'); ?>
+
+                <!-- Category Selection -->
+                <h2>Product Categories</h2>
+                <p>Select the categories where the calculator should appear:</p>
+                <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+                    <?php
+                    if (!empty($categories)) {
+                        $this->render_category_checkboxes($categories, $selected_categories);
+                    } else {
+                        echo '<p>No categories found.</p>';
+                    }
+                    ?>
+                </div>
+
+                <!-- WhatsApp Number -->
+                <h2>WhatsApp Number</h2>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="lipa_polepole_whatsapp">WhatsApp Number</label>
+                        </th>
+                        <td>
+                            <input type="text"
+                                   id="lipa_polepole_whatsapp"
+                                   name="lipa_polepole_whatsapp"
+                                   value="<?php echo esc_attr($whatsapp); ?>"
+                                   class="regular-text"
+                                   placeholder="254726166061">
+                            <p class="description">Enter WhatsApp number with country code (e.g., 254726166061)</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Payment Plans -->
+                <h2>Payment Plans</h2>
+                <p>Configure your payment plans:</p>
+                <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+                    <table class="widefat" style="margin-bottom: 15px;">
+                        <thead>
+                            <tr>
+                                <th>Weeks</th>
+                                <th>Interest (%)</th>
+                                <th>Deposit (%)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payment-plans-tbody">
+                            <?php foreach ($payment_plans as $index => $plan): ?>
+                            <tr>
+                                <td>
+                                    <input type="number"
+                                           name="payment_plans[<?php echo $index; ?>][weeks]"
+                                           value="<?php echo esc_attr($plan['weeks']); ?>"
+                                           min="1"
+                                           style="width: 100px;">
+                                </td>
+                                <td>
+                                    <input type="number"
+                                           name="payment_plans[<?php echo $index; ?>][interest]"
+                                           value="<?php echo esc_attr($plan['interest']); ?>"
+                                           min="0"
+                                           max="100"
+                                           style="width: 100px;">
+                                </td>
+                                <td>
+                                    <input type="number"
+                                           name="payment_plans[<?php echo $index; ?>][deposit]"
+                                           value="<?php echo esc_attr($plan['deposit']); ?>"
+                                           min="0"
+                                           max="100"
+                                           style="width: 100px;">
+                                </td>
+                                <td>
+                                    <button type="button" class="button remove-plan" onclick="removePaymentPlan(this)">Remove</button>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <button type="button" class="button" onclick="addPaymentPlan()">Add Payment Plan</button>
+                </div>
+
+                <p class="submit">
+                    <input type="submit"
+                           name="lipa_polepole_save_settings"
+                           class="button button-primary"
+                           value="Save Settings">
+                </p>
+            </form>
+        </div>
+
+        <script>
+        var planIndex = <?php echo count($payment_plans); ?>;
+
+        function addPaymentPlan() {
+            var tbody = document.getElementById('payment-plans-tbody');
+            var row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="number" name="payment_plans[${planIndex}][weeks]" value="4" min="1" style="width: 100px;"></td>
+                <td><input type="number" name="payment_plans[${planIndex}][interest]" value="30" min="0" max="100" style="width: 100px;"></td>
+                <td><input type="number" name="payment_plans[${planIndex}][deposit]" value="40" min="0" max="100" style="width: 100px;"></td>
+                <td><button type="button" class="button remove-plan" onclick="removePaymentPlan(this)">Remove</button></td>
+            `;
+            tbody.appendChild(row);
+            planIndex++;
+        }
+
+        function removePaymentPlan(button) {
+            if (confirm('Are you sure you want to remove this payment plan?')) {
+                button.closest('tr').remove();
+            }
+        }
+        </script>
+        <?php
+    }
+
+    // Render category checkboxes hierarchically
+    private function render_category_checkboxes($categories, $selected_categories, $parent = 0, $level = 0) {
+        foreach ($categories as $category) {
+            if ($category->parent == $parent) {
+                $checked = in_array($category->term_id, $selected_categories) ? 'checked' : '';
+                $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $level);
+
+                echo '<div style="margin: 5px 0;">';
+                echo $indent;
+                echo '<label>';
+                echo '<input type="checkbox" name="lipa_polepole_categories[]" value="' . esc_attr($category->term_id) . '" ' . $checked . '> ';
+                echo esc_html($category->name) . ' (' . $category->count . ' products)';
+                echo '</label>';
+                echo '</div>';
+
+                // Render child categories
+                $this->render_category_checkboxes($categories, $selected_categories, $category->term_id, $level + 1);
+            }
+        }
+    }
+
+    // Check if product should show calculator
+    private function should_show_calculator($product_id) {
+        $selected_categories = get_option('lipa_polepole_categories', array());
+
+        // If no categories selected, don't show calculator
+        if (empty($selected_categories)) {
+            return false;
+        }
+
+        // Check if product is in any of the selected categories
+        foreach ($selected_categories as $cat_id) {
+            if (has_term($cat_id, 'product_cat', $product_id)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Modify price display to show deposit
+    public function modify_price_display($price_html, $product) {
+        // Only modify if calculator should show for this product
+        if (!$this->should_show_calculator($product->get_id())) {
+            return $price_html;
+        }
+
+        // Get the product price
+        $product_price = floatval($product->get_price());
+
+        if ($product_price <= 0) {
+            return $price_html;
+        }
+
+        // Calculate 40% deposit
+        $deposit = $product_price * 0.40;
+
+        // Format prices
+        $formatted_deposit = wc_price($deposit);
+        $formatted_original = wc_price($product_price);
+
+        // Return new price HTML with deposit and struck-through original price
+        return '<div class="lipa-polepole-price-display">
+                    <span class="deposit-price" style="font-size: 1.2em; font-weight: bold;">Deposit: ' . $formatted_deposit . '</span>
+                    <br>
+                    <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_original . '</span>
+                </div>';
     }
 
     public function enqueue_scripts() {
@@ -22,7 +292,17 @@ class Simple_Calculator_Plugin {
             return;
         }
 
+        // Get settings
+        $whatsapp = get_option('lipa_polepole_whatsapp', '254726166061');
+        $payment_plans = get_option('lipa_polepole_payment_plans', $this->get_default_payment_plans());
+
         wp_enqueue_script('jquery');
+
+        // Pass settings to JavaScript
+        wp_localize_script('jquery', 'lipaPolepoleSettings', array(
+            'whatsapp' => $whatsapp,
+            'paymentPlans' => $payment_plans,
+        ));
 
         // Inline script
         wp_add_inline_script('jquery', '
@@ -201,7 +481,8 @@ class Simple_Calculator_Plugin {
                     "%0AWeekly Payment: Ksh " + addCommas(weeklyPayment) +
                     "%0A%0APlease confirm availability and next steps.";
 
-                var whatsappUrl = "https://wa.me/254726166061?text=" + whatsappMessage;
+                var whatsappNumber = lipaPolepoleSettings.whatsapp || "254726166061";
+                var whatsappUrl = "https://wa.me/" + whatsappNumber + "?text=" + whatsappMessage;
                 $("#whatsappBtn").attr("href", whatsappUrl);
 
                 // Show results and WhatsApp button
@@ -577,11 +858,13 @@ class Simple_Calculator_Plugin {
 
         global $product;
 
-        // Check if in correct category
-        $term = get_term_by('slug', 'lipa-polepole-iphones', 'product_cat');
-        if (!$term || !has_term($term->term_id, 'product_cat', $product->get_id())) {
+        // Check if calculator should show for this product
+        if (!$this->should_show_calculator($product->get_id())) {
             return $content;
         }
+
+        // Get payment plans from settings
+        $payment_plans = get_option('lipa_polepole_payment_plans', $this->get_default_payment_plans());
 
         $calculator_html = '
         <div class="simple-calculator">
@@ -608,14 +891,16 @@ class Simple_Calculator_Plugin {
                     <div id="modalPlanSection" class="modal-plan-section">
                         <label for="simplePlan">Select Payment Plan:</label>
                         <select id="simplePlan">
-                            <option value="">Choose your payment plan</option>
-                            <option value="2,25,40">2 weeks - 25% interest - 40% deposit</option>
-                            <option value="4,30,40">4 weeks - 30% interest - 40% deposit</option>
-                            <option value="8,40,40">8 weeks - 40% interest - 40% deposit</option>
-                            <option value="12,50,40">12 weeks - 50% interest - 40% deposit</option>
-                            <option value="16,60,50">16 weeks - 60% interest - 50% deposit</option>
-                            <option value="20,70,50">20 weeks - 70% interest - 50% deposit</option>
-                            <option value="24,80,50">24 weeks - 80% interest - 50% deposit</option>
+                            <option value="">Choose your payment plan</option>';
+
+        // Add payment plans from settings
+        foreach ($payment_plans as $plan) {
+            $value = $plan['weeks'] . ',' . $plan['interest'] . ',' . $plan['deposit'];
+            $label = $plan['weeks'] . ' weeks - ' . $plan['interest'] . '% interest - ' . $plan['deposit'] . '% deposit';
+            $calculator_html .= '<option value="' . esc_attr($value) . '">' . esc_html($label) . '</option>';
+        }
+
+        $calculator_html .= '
                         </select>
                     </div>
 
