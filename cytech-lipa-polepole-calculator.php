@@ -466,38 +466,83 @@ class Simple_Calculator_Plugin {
             return;
         }
 
-        $current_price = floatval($product->get_regular_price());
+        // Handle variable products
+        if ($product->is_type('variable')) {
+            $variations = $product->get_available_variations();
 
-        // Skip if no price
-        if ($current_price <= 0) {
-            return;
-        }
+            foreach ($variations as $variation_data) {
+                $variation_id = $variation_data['variation_id'];
+                $variation = wc_get_product($variation_id);
 
-        // Check if already converted (has full price meta)
-        $existing_full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+                if (!$variation) {
+                    continue;
+                }
 
-        if (!$existing_full_price) {
-            // First time conversion - save current price as full price
-            update_post_meta($product_id, '_lipa_polepole_full_price', $current_price);
+                $current_price = floatval($variation->get_regular_price());
 
-            // Set product price to 40% deposit
-            $deposit_price = $current_price * 0.40;
-            $product->set_regular_price($deposit_price);
-            $product->set_price($deposit_price);
-            $product->save();
+                if ($current_price <= 0) {
+                    continue;
+                }
+
+                $existing_full_price = get_post_meta($variation_id, '_lipa_polepole_full_price', true);
+
+                if (!$existing_full_price) {
+                    // First time conversion
+                    update_post_meta($variation_id, '_lipa_polepole_full_price', $current_price);
+
+                    $deposit_price = $current_price * 0.40;
+                    $variation->set_regular_price($deposit_price);
+                    $variation->set_price($deposit_price);
+                    $variation->save();
+                } else {
+                    // Check if admin changed the price
+                    $deposit_price = floatval($existing_full_price) * 0.40;
+
+                    if (abs($current_price - $deposit_price) > 0.01) {
+                        update_post_meta($variation_id, '_lipa_polepole_full_price', $current_price);
+
+                        $new_deposit = $current_price * 0.40;
+                        $variation->set_regular_price($new_deposit);
+                        $variation->set_price($new_deposit);
+                        $variation->save();
+                    }
+                }
+            }
         } else {
-            // Already converted - check if admin changed the price
-            $deposit_price = floatval($existing_full_price) * 0.40;
+            // Handle simple products
+            $current_price = floatval($product->get_regular_price());
 
-            // If current price differs significantly from expected deposit, admin changed it
-            if (abs($current_price - $deposit_price) > 0.01) {
-                // Assume admin changed full price, update meta and recalculate
+            // Skip if no price
+            if ($current_price <= 0) {
+                return;
+            }
+
+            // Check if already converted (has full price meta)
+            $existing_full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+
+            if (!$existing_full_price) {
+                // First time conversion - save current price as full price
                 update_post_meta($product_id, '_lipa_polepole_full_price', $current_price);
 
-                $new_deposit = $current_price * 0.40;
-                $product->set_regular_price($new_deposit);
-                $product->set_price($new_deposit);
+                // Set product price to 40% deposit
+                $deposit_price = $current_price * 0.40;
+                $product->set_regular_price($deposit_price);
+                $product->set_price($deposit_price);
                 $product->save();
+            } else {
+                // Already converted - check if admin changed the price
+                $deposit_price = floatval($existing_full_price) * 0.40;
+
+                // If current price differs significantly from expected deposit, admin changed it
+                if (abs($current_price - $deposit_price) > 0.01) {
+                    // Assume admin changed full price, update meta and recalculate
+                    update_post_meta($product_id, '_lipa_polepole_full_price', $current_price);
+
+                    $new_deposit = $current_price * 0.40;
+                    $product->set_regular_price($new_deposit);
+                    $product->set_price($new_deposit);
+                    $product->save();
+                }
             }
         }
     }
@@ -542,24 +587,53 @@ class Simple_Calculator_Plugin {
                 continue;
             }
 
-            $current_price = floatval($product->get_regular_price());
+            // Handle variable products
+            if ($product->is_type('variable')) {
+                $variations = $product->get_available_variations();
 
-            if ($current_price <= 0) {
-                continue;
-            }
+                foreach ($variations as $variation_data) {
+                    $variation_id = $variation_data['variation_id'];
+                    $variation = wc_get_product($variation_id);
 
-            // Check if already has full price meta
-            $existing_full_price = get_post_meta($post->ID, '_lipa_polepole_full_price', true);
+                    if (!$variation) {
+                        continue;
+                    }
 
-            if (!$existing_full_price) {
-                // Save current price as full price
-                update_post_meta($post->ID, '_lipa_polepole_full_price', $current_price);
+                    $current_price = floatval($variation->get_regular_price());
 
-                // Set to 40% deposit
-                $deposit_price = $current_price * 0.40;
-                $product->set_regular_price($deposit_price);
-                $product->set_price($deposit_price);
-                $product->save();
+                    if ($current_price <= 0) {
+                        continue;
+                    }
+
+                    $existing_full_price = get_post_meta($variation_id, '_lipa_polepole_full_price', true);
+
+                    if (!$existing_full_price) {
+                        update_post_meta($variation_id, '_lipa_polepole_full_price', $current_price);
+
+                        $deposit_price = $current_price * 0.40;
+                        $variation->set_regular_price($deposit_price);
+                        $variation->set_price($deposit_price);
+                        $variation->save();
+                    }
+                }
+            } else {
+                // Handle simple products
+                $current_price = floatval($product->get_regular_price());
+
+                if ($current_price <= 0) {
+                    continue;
+                }
+
+                $existing_full_price = get_post_meta($post->ID, '_lipa_polepole_full_price', true);
+
+                if (!$existing_full_price) {
+                    update_post_meta($post->ID, '_lipa_polepole_full_price', $current_price);
+
+                    $deposit_price = $current_price * 0.40;
+                    $product->set_regular_price($deposit_price);
+                    $product->set_price($deposit_price);
+                    $product->save();
+                }
             }
         }
 
@@ -671,26 +745,78 @@ class Simple_Calculator_Plugin {
             return $price_html;
         }
 
-        // Get the full price from meta
-        $full_price = $this->get_full_price($product->get_id());
+        // Handle variable products differently
+        if ($product->is_type('variable')) {
+            $variations = $product->get_available_variations();
 
-        if ($full_price <= 0) {
-            return $price_html;
+            if (empty($variations)) {
+                return $price_html;
+            }
+
+            // Get min and max deposit prices from variations
+            $min_deposit = null;
+            $max_deposit = null;
+            $min_full_price = null;
+            $max_full_price = null;
+
+            foreach ($variations as $variation_data) {
+                $variation_id = $variation_data['variation_id'];
+                $variation_deposit = $variation_data['display_price']; // This is already the 40% deposit
+                $variation_full_price = get_post_meta($variation_id, '_lipa_polepole_full_price', true);
+
+                if (!$variation_full_price) {
+                    $variation_full_price = $variation_deposit * 2.5;
+                }
+
+                if ($min_deposit === null || $variation_deposit < $min_deposit) {
+                    $min_deposit = $variation_deposit;
+                    $min_full_price = $variation_full_price;
+                }
+
+                if ($max_deposit === null || $variation_deposit > $max_deposit) {
+                    $max_deposit = $variation_deposit;
+                    $max_full_price = $variation_full_price;
+                }
+            }
+
+            // Format prices
+            if ($min_deposit == $max_deposit) {
+                // Single price
+                $formatted_deposit = wc_price($min_deposit);
+                $formatted_full_price = wc_price($min_full_price);
+            } else {
+                // Price range
+                $formatted_deposit = wc_price($min_deposit) . ' - ' . wc_price($max_deposit);
+                $formatted_full_price = wc_price($min_full_price) . ' - ' . wc_price($max_full_price);
+            }
+
+            return '<div class="lipa-polepole-price-display">
+                        <span class="deposit-price" style="font-size: 1.2em; font-weight: bold;">Deposit: ' . $formatted_deposit . '</span>
+                        <br>
+                        <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_full_price . '</span>
+                    </div>';
+        } else {
+            // Handle simple products
+            $full_price = $this->get_full_price($product->get_id());
+
+            if ($full_price <= 0) {
+                return $price_html;
+            }
+
+            // Get deposit (current product price)
+            $deposit = floatval($product->get_price());
+
+            // Format prices
+            $formatted_deposit = wc_price($deposit);
+            $formatted_full_price = wc_price($full_price);
+
+            // Return new price HTML with deposit and struck-through full price
+            return '<div class="lipa-polepole-price-display">
+                        <span class="deposit-price" style="font-size: 1.2em; font-weight: bold;">Deposit: ' . $formatted_deposit . '</span>
+                        <br>
+                        <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_full_price . '</span>
+                    </div>';
         }
-
-        // Get deposit (current product price)
-        $deposit = floatval($product->get_price());
-
-        // Format prices
-        $formatted_deposit = wc_price($deposit);
-        $formatted_full_price = wc_price($full_price);
-
-        // Return new price HTML with deposit and struck-through full price
-        return '<div class="lipa-polepole-price-display">
-                    <span class="deposit-price" style="font-size: 1.2em; font-weight: bold;">Deposit: ' . $formatted_deposit . '</span>
-                    <br>
-                    <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_full_price . '</span>
-                </div>';
     }
 
     public function enqueue_scripts() {
@@ -706,8 +832,27 @@ class Simple_Calculator_Plugin {
 
         // Get full price for current product
         $full_price = 0;
+        $variation_full_prices = array();
+
         if ($product && $this->should_show_calculator($product->get_id())) {
-            $full_price = $this->get_full_price($product->get_id());
+            if ($product->is_type('variable')) {
+                // For variable products, get full price for each variation
+                $variations = $product->get_available_variations();
+                foreach ($variations as $variation_data) {
+                    $variation_id = $variation_data['variation_id'];
+                    $variation_full_price = get_post_meta($variation_id, '_lipa_polepole_full_price', true);
+
+                    if (!$variation_full_price) {
+                        // Fallback to display price * 2.5 if meta doesn't exist
+                        $variation_full_price = $variation_data['display_price'] * 2.5;
+                    }
+
+                    $variation_full_prices[$variation_id] = floatval($variation_full_price);
+                }
+            } else {
+                // For simple products
+                $full_price = $this->get_full_price($product->get_id());
+            }
         }
 
         wp_enqueue_script('jquery');
@@ -717,6 +862,7 @@ class Simple_Calculator_Plugin {
             'whatsapp' => $whatsapp,
             'paymentPlans' => $payment_plans,
             'fullPrice' => $full_price,
+            'variationFullPrices' => $variation_full_prices,
         ));
 
         // Inline script
@@ -740,8 +886,15 @@ class Simple_Calculator_Plugin {
                     // Store variations by variation_id
                     $.each(variations, function(index, variation) {
                         if (variation.is_purchasable && variation.is_in_stock) {
+                            // Get full price for this variation
+                            var fullPrice = variation.display_price * 2.5; // Default fallback
+                            if (lipaPolepoleSettings.variationFullPrices && lipaPolepoleSettings.variationFullPrices[variation.variation_id]) {
+                                fullPrice = parseFloat(lipaPolepoleSettings.variationFullPrices[variation.variation_id]);
+                            }
+
                             variationsData[variation.variation_id] = {
                                 price: variation.display_price,
+                                fullPrice: fullPrice,
                                 attributes: variation.attributes,
                                 variation_id: variation.variation_id
                             };
@@ -752,7 +905,7 @@ class Simple_Calculator_Plugin {
 
             // Function to get current product price (full price for calculations)
             function getCurrentPrice() {
-                // PRIORITY 1: For variable products, use the price from modal variation selector
+                // PRIORITY 1: For variable products, use the full price from selected variation
                 if (isVariableProduct && currentSelectedPrice > 0) {
                     return currentSelectedPrice;
                 }
@@ -917,8 +1070,8 @@ class Simple_Calculator_Plugin {
                 if (selectedVariationId && variationsData[selectedVariationId]) {
                     var variation = variationsData[selectedVariationId];
 
-                    // Store the selected variation price
-                    currentSelectedPrice = parseFloat(variation.price);
+                    // Store the selected variation FULL price (for calculations)
+                    currentSelectedPrice = parseFloat(variation.fullPrice || variation.price * 2.5);
 
                     // Build variation text for WhatsApp
                     var attrs = variation.attributes;
