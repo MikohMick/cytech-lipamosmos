@@ -22,6 +22,14 @@ class Simple_Calculator_Plugin {
 
         // Price display override
         add_filter('woocommerce_get_price_html', array($this, 'modify_price_display'), 10, 2);
+
+        // Product save hook for automatic price conversion
+        add_action('woocommerce_update_product', array($this, 'auto_convert_product_price'), 10, 1);
+        add_action('woocommerce_new_product', array($this, 'auto_convert_product_price'), 10, 1);
+
+        // AJAX handlers
+        add_action('wp_ajax_lipa_polepole_convert_products', array($this, 'ajax_convert_products'));
+        add_action('wp_ajax_lipa_polepole_revert_products', array($this, 'ajax_revert_products'));
     }
 
     // Add admin menu
@@ -191,6 +199,66 @@ class Simple_Calculator_Plugin {
                            value="Save Settings">
                 </p>
             </form>
+
+            <!-- Bulk Conversion Section -->
+            <hr style="margin: 30px 0;">
+            <h2>Bulk Price Conversion</h2>
+            <p>Convert existing products in selected categories to show deposit prices (40% of full price).</p>
+            <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+                <button type="button" id="convertProductsBtn" class="button button-secondary">
+                    Convert Products in Selected Categories
+                </button>
+                <div id="convertProgress" style="display: none; margin-top: 15px;">
+                    <div style="background: #f0f0f0; height: 20px; border-radius: 10px; overflow: hidden;">
+                        <div id="convertProgressBar" style="background: #2271b1; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="convertStatus" style="margin-top: 10px;">Processing...</p>
+                </div>
+            </div>
+
+            <!-- Revert Section -->
+            <h2>Revert Prices</h2>
+            <p>Restore original prices for products in selected categories.</p>
+            <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+                <p><strong>Select categories to revert:</strong></p>
+                <div style="margin: 15px 0;">
+                    <?php
+                    if (!empty($categories)) {
+                        foreach ($categories as $category) {
+                            if ($category->parent == 0) {
+                                echo '<div style="margin: 5px 0;">';
+                                echo '<label>';
+                                echo '<input type="checkbox" class="revert-category" value="' . esc_attr($category->term_id) . '"> ';
+                                echo esc_html($category->name) . ' (' . $category->count . ' products)';
+                                echo '</label>';
+                                echo '</div>';
+
+                                // Render child categories
+                                foreach ($categories as $child_cat) {
+                                    if ($child_cat->parent == $category->term_id) {
+                                        echo '<div style="margin: 5px 0 5px 30px;">';
+                                        echo '<label>';
+                                        echo '<input type="checkbox" class="revert-category" value="' . esc_attr($child_cat->term_id) . '"> ';
+                                        echo esc_html($child_cat->name) . ' (' . $child_cat->count . ' products)';
+                                        echo '</label>';
+                                        echo '</div>';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ?>
+                </div>
+                <button type="button" id="revertProductsBtn" class="button button-secondary">
+                    Revert Selected Categories
+                </button>
+                <div id="revertProgress" style="display: none; margin-top: 15px;">
+                    <div style="background: #f0f0f0; height: 20px; border-radius: 10px; overflow: hidden;">
+                        <div id="revertProgressBar" style="background: #2271b1; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="revertStatus" style="margin-top: 10px;">Processing...</p>
+                </div>
+            </div>
         </div>
 
         <script>
@@ -213,6 +281,119 @@ class Simple_Calculator_Plugin {
             if (confirm('Are you sure you want to remove this payment plan?')) {
                 button.closest('tr').remove();
             }
+        }
+
+        // Bulk Convert Products
+        document.getElementById('convertProductsBtn').addEventListener('click', function() {
+            if (!confirm('This will convert all products in selected categories. Continue?')) {
+                return;
+            }
+
+            var btn = this;
+            btn.disabled = true;
+            document.getElementById('convertProgress').style.display = 'block';
+
+            convertBatch(0);
+        });
+
+        function convertBatch(offset) {
+            jQuery.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lipa_polepole_convert_products',
+                    nonce: '<?php echo wp_create_nonce('lipa_polepole_convert'); ?>',
+                    offset: offset
+                },
+                success: function(response) {
+                    if (response.success) {
+                        var percent = (response.data.processed / response.data.total) * 100;
+                        document.getElementById('convertProgressBar').style.width = percent + '%';
+                        document.getElementById('convertStatus').textContent =
+                            'Processed ' + response.data.processed + ' of ' + response.data.total + ' products';
+
+                        if (!response.data.done) {
+                            convertBatch(response.data.processed);
+                        } else {
+                            document.getElementById('convertStatus').textContent = 'Conversion complete! ' + response.data.total + ' products processed.';
+                            document.getElementById('convertProductsBtn').disabled = false;
+                            setTimeout(function() {
+                                document.getElementById('convertProgress').style.display = 'none';
+                                document.getElementById('convertProgressBar').style.width = '0%';
+                            }, 3000);
+                        }
+                    } else {
+                        alert('Error: ' + (response.data || 'Unknown error'));
+                        document.getElementById('convertProductsBtn').disabled = false;
+                    }
+                },
+                error: function() {
+                    alert('AJAX error occurred');
+                    document.getElementById('convertProductsBtn').disabled = false;
+                }
+            });
+        }
+
+        // Revert Products
+        document.getElementById('revertProductsBtn').addEventListener('click', function() {
+            var selectedCategories = [];
+            document.querySelectorAll('.revert-category:checked').forEach(function(checkbox) {
+                selectedCategories.push(checkbox.value);
+            });
+
+            if (selectedCategories.length === 0) {
+                alert('Please select at least one category to revert');
+                return;
+            }
+
+            if (!confirm('This will restore original prices for products in selected categories. Continue?')) {
+                return;
+            }
+
+            var btn = this;
+            btn.disabled = true;
+            document.getElementById('revertProgress').style.display = 'block';
+
+            revertBatch(0, selectedCategories);
+        });
+
+        function revertBatch(offset, categories) {
+            jQuery.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lipa_polepole_revert_products',
+                    nonce: '<?php echo wp_create_nonce('lipa_polepole_revert'); ?>',
+                    offset: offset,
+                    categories: categories
+                },
+                success: function(response) {
+                    if (response.success) {
+                        var percent = (response.data.processed / response.data.total) * 100;
+                        document.getElementById('revertProgressBar').style.width = percent + '%';
+                        document.getElementById('revertStatus').textContent =
+                            'Processed ' + response.data.processed + ' of ' + response.data.total + ' products';
+
+                        if (!response.data.done) {
+                            revertBatch(response.data.processed, categories);
+                        } else {
+                            document.getElementById('revertStatus').textContent = 'Revert complete! ' + response.data.total + ' products restored.';
+                            document.getElementById('revertProductsBtn').disabled = false;
+                            setTimeout(function() {
+                                document.getElementById('revertProgress').style.display = 'none';
+                                document.getElementById('revertProgressBar').style.width = '0%';
+                            }, 3000);
+                        }
+                    } else {
+                        alert('Error: ' + (response.data || 'Unknown error'));
+                        document.getElementById('revertProductsBtn').disabled = false;
+                    }
+                },
+                error: function() {
+                    alert('AJAX error occurred');
+                    document.getElementById('revertProductsBtn').disabled = false;
+                }
+            });
         }
         </script>
         <?php
@@ -258,6 +439,231 @@ class Simple_Calculator_Plugin {
         return false;
     }
 
+    // Get full price (from meta or current price)
+    private function get_full_price($product_id) {
+        $full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+
+        if (!$full_price || $full_price <= 0) {
+            // Fallback to current price
+            $product = wc_get_product($product_id);
+            if ($product) {
+                $full_price = $product->get_price();
+            }
+        }
+
+        return floatval($full_price);
+    }
+
+    // Auto-convert product price on save/update
+    public function auto_convert_product_price($product_id) {
+        // Check if product is in selected categories
+        if (!$this->should_show_calculator($product_id)) {
+            return;
+        }
+
+        $product = wc_get_product($product_id);
+        if (!$product) {
+            return;
+        }
+
+        $current_price = floatval($product->get_regular_price());
+
+        // Skip if no price
+        if ($current_price <= 0) {
+            return;
+        }
+
+        // Check if already converted (has full price meta)
+        $existing_full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+
+        if (!$existing_full_price) {
+            // First time conversion - save current price as full price
+            update_post_meta($product_id, '_lipa_polepole_full_price', $current_price);
+
+            // Set product price to 40% deposit
+            $deposit_price = $current_price * 0.40;
+            $product->set_regular_price($deposit_price);
+            $product->set_price($deposit_price);
+            $product->save();
+        } else {
+            // Already converted - check if admin changed the price
+            $deposit_price = floatval($existing_full_price) * 0.40;
+
+            // If current price differs significantly from expected deposit, admin changed it
+            if (abs($current_price - $deposit_price) > 0.01) {
+                // Assume admin changed full price, update meta and recalculate
+                update_post_meta($product_id, '_lipa_polepole_full_price', $current_price);
+
+                $new_deposit = $current_price * 0.40;
+                $product->set_regular_price($new_deposit);
+                $product->set_price($new_deposit);
+                $product->save();
+            }
+        }
+    }
+
+    // AJAX: Bulk convert products
+    public function ajax_convert_products() {
+        check_ajax_referer('lipa_polepole_convert', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $batch_size = 10;
+
+        $selected_categories = get_option('lipa_polepole_categories', array());
+
+        if (empty($selected_categories)) {
+            wp_send_json_error('No categories selected');
+        }
+
+        // Get products in selected categories
+        $args = array(
+            'post_type' => 'product',
+            'posts_per_page' => $batch_size,
+            'offset' => $offset,
+            'tax_query' => array(
+                array(
+                    'taxonomy' => 'product_cat',
+                    'field' => 'term_id',
+                    'terms' => $selected_categories,
+                    'operator' => 'IN',
+                ),
+            ),
+        );
+
+        $products = get_posts($args);
+
+        foreach ($products as $post) {
+            $product = wc_get_product($post->ID);
+            if (!$product) {
+                continue;
+            }
+
+            $current_price = floatval($product->get_regular_price());
+
+            if ($current_price <= 0) {
+                continue;
+            }
+
+            // Check if already has full price meta
+            $existing_full_price = get_post_meta($post->ID, '_lipa_polepole_full_price', true);
+
+            if (!$existing_full_price) {
+                // Save current price as full price
+                update_post_meta($post->ID, '_lipa_polepole_full_price', $current_price);
+
+                // Set to 40% deposit
+                $deposit_price = $current_price * 0.40;
+                $product->set_regular_price($deposit_price);
+                $product->set_price($deposit_price);
+                $product->save();
+            }
+        }
+
+        // Get total count
+        $total_args = array(
+            'post_type' => 'product',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'tax_query' => array(
+                array(
+                    'taxonomy' => 'product_cat',
+                    'field' => 'term_id',
+                    'terms' => $selected_categories,
+                    'operator' => 'IN',
+                ),
+            ),
+        );
+        $total_products = count(get_posts($total_args));
+
+        $processed = $offset + count($products);
+        $done = $processed >= $total_products;
+
+        wp_send_json_success(array(
+            'processed' => $processed,
+            'total' => $total_products,
+            'done' => $done,
+        ));
+    }
+
+    // AJAX: Revert products
+    public function ajax_revert_products() {
+        check_ajax_referer('lipa_polepole_revert', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $batch_size = 10;
+        $categories_to_revert = isset($_POST['categories']) ? array_map('intval', $_POST['categories']) : array();
+
+        if (empty($categories_to_revert)) {
+            wp_send_json_error('No categories selected');
+        }
+
+        // Get products in selected categories
+        $args = array(
+            'post_type' => 'product',
+            'posts_per_page' => $batch_size,
+            'offset' => $offset,
+            'tax_query' => array(
+                array(
+                    'taxonomy' => 'product_cat',
+                    'field' => 'term_id',
+                    'terms' => $categories_to_revert,
+                    'operator' => 'IN',
+                ),
+            ),
+        );
+
+        $products = get_posts($args);
+
+        foreach ($products as $post) {
+            $full_price = get_post_meta($post->ID, '_lipa_polepole_full_price', true);
+
+            if ($full_price && $full_price > 0) {
+                $product = wc_get_product($post->ID);
+                if ($product) {
+                    $product->set_regular_price($full_price);
+                    $product->set_price($full_price);
+                    $product->save();
+
+                    // Delete the meta
+                    delete_post_meta($post->ID, '_lipa_polepole_full_price');
+                }
+            }
+        }
+
+        // Get total count
+        $total_args = array(
+            'post_type' => 'product',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'tax_query' => array(
+                array(
+                    'taxonomy' => 'product_cat',
+                    'field' => 'term_id',
+                    'terms' => $categories_to_revert,
+                    'operator' => 'IN',
+                ),
+            ),
+        );
+        $total_products = count(get_posts($total_args));
+
+        $processed = $offset + count($products);
+        $done = $processed >= $total_products;
+
+        wp_send_json_success(array(
+            'processed' => $processed,
+            'total' => $total_products,
+            'done' => $done,
+        ));
+    }
+
     // Modify price display to show deposit
     public function modify_price_display($price_html, $product) {
         // Only modify if calculator should show for this product
@@ -265,25 +671,25 @@ class Simple_Calculator_Plugin {
             return $price_html;
         }
 
-        // Get the product price
-        $product_price = floatval($product->get_price());
+        // Get the full price from meta
+        $full_price = $this->get_full_price($product->get_id());
 
-        if ($product_price <= 0) {
+        if ($full_price <= 0) {
             return $price_html;
         }
 
-        // Calculate 40% deposit
-        $deposit = $product_price * 0.40;
+        // Get deposit (current product price)
+        $deposit = floatval($product->get_price());
 
         // Format prices
         $formatted_deposit = wc_price($deposit);
-        $formatted_original = wc_price($product_price);
+        $formatted_full_price = wc_price($full_price);
 
-        // Return new price HTML with deposit and struck-through original price
+        // Return new price HTML with deposit and struck-through full price
         return '<div class="lipa-polepole-price-display">
                     <span class="deposit-price" style="font-size: 1.2em; font-weight: bold;">Deposit: ' . $formatted_deposit . '</span>
                     <br>
-                    <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_original . '</span>
+                    <span class="original-price" style="text-decoration: line-through; color: #999; font-size: 0.9em;">Full Price: ' . $formatted_full_price . '</span>
                 </div>';
     }
 
@@ -292,9 +698,17 @@ class Simple_Calculator_Plugin {
             return;
         }
 
+        global $product;
+
         // Get settings
         $whatsapp = get_option('lipa_polepole_whatsapp', '254726166061');
         $payment_plans = get_option('lipa_polepole_payment_plans', $this->get_default_payment_plans());
+
+        // Get full price for current product
+        $full_price = 0;
+        if ($product && $this->should_show_calculator($product->get_id())) {
+            $full_price = $this->get_full_price($product->get_id());
+        }
 
         wp_enqueue_script('jquery');
 
@@ -302,6 +716,7 @@ class Simple_Calculator_Plugin {
         wp_localize_script('jquery', 'lipaPolepoleSettings', array(
             'whatsapp' => $whatsapp,
             'paymentPlans' => $payment_plans,
+            'fullPrice' => $full_price,
         ));
 
         // Inline script
@@ -335,32 +750,37 @@ class Simple_Calculator_Plugin {
                 }
             }
 
-            // Function to get current product price
+            // Function to get current product price (full price for calculations)
             function getCurrentPrice() {
                 // PRIORITY 1: For variable products, use the price from modal variation selector
                 if (isVariableProduct && currentSelectedPrice > 0) {
                     return currentSelectedPrice;
                 }
 
-                // PRIORITY 2: Try to get from variation price display on page
+                // PRIORITY 2: Use full price from settings (for simple products)
+                if (lipaPolepoleSettings.fullPrice && lipaPolepoleSettings.fullPrice > 0) {
+                    return parseFloat(lipaPolepoleSettings.fullPrice);
+                }
+
+                // PRIORITY 3: Try to get from variation price display on page
                 var variationPrice = $(".summary .woocommerce-variation-price .woocommerce-Price-amount bdi, .entry-summary .woocommerce-variation-price .woocommerce-Price-amount bdi").first();
                 if (variationPrice.length && variationPrice.text()) {
                     var price = parseFloat(variationPrice.text().replace(/[^0-9.-]+/g,""));
-                    if (price > 0) return price;
+                    if (price > 0) return price * 2.5; // Convert deposit back to full price (deposit is 40%, so full = deposit * 2.5)
                 }
 
-                // PRIORITY 3: Get regular product price from summary area
+                // PRIORITY 4: Get regular product price from summary area
                 var priceElement = $(".summary .price .woocommerce-Price-amount bdi, .entry-summary .price .woocommerce-Price-amount bdi").first();
                 if (priceElement.length) {
                     var price = parseFloat(priceElement.text().replace(/[^0-9.-]+/g,""));
-                    if (price > 0) return price;
+                    if (price > 0) return price * 2.5; // Convert deposit back to full price
                 }
 
-                // PRIORITY 4: Fallback for sale prices
+                // PRIORITY 5: Fallback for sale prices
                 var salePrice = $(".summary .price ins .amount bdi, .entry-summary .price ins .amount bdi").first();
                 if (salePrice.length) {
                     var price = parseFloat(salePrice.text().replace(/[^0-9.-]+/g,""));
-                    if (price > 0) return price;
+                    if (price > 0) return price * 2.5; // Convert deposit back to full price
                 }
 
                 return 0;
