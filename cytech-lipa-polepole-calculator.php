@@ -824,7 +824,8 @@ class Simple_Calculator_Plugin {
             return;
         }
 
-        global $product;
+        global $post;
+        $product = wc_get_product($post->ID);
 
         // Get settings
         $whatsapp = get_option('lipa_polepole_whatsapp', '254726166061');
@@ -834,7 +835,7 @@ class Simple_Calculator_Plugin {
         $full_price = 0;
         $variation_full_prices = array();
 
-        if ($product && $this->should_show_calculator($product->get_id())) {
+        if ($product && is_object($product) && $this->should_show_calculator($product->get_id())) {
             if ($product->is_type('variable')) {
                 // For variable products, get full price for each variation
                 $variations = $product->get_available_variations();
@@ -1429,10 +1430,11 @@ class Simple_Calculator_Plugin {
             return $content;
         }
 
-        global $product;
+        global $post;
+        $product = wc_get_product($post->ID);
 
         // Check if calculator should show for this product
-        if (!$this->should_show_calculator($product->get_id())) {
+        if (!$product || !is_object($product) || !$this->should_show_calculator($product->get_id())) {
             return $content;
         }
 
