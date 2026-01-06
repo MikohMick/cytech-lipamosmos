@@ -30,6 +30,15 @@ class Simple_Calculator_Plugin {
         // AJAX handlers
         add_action('wp_ajax_lipa_polepole_convert_products', array($this, 'ajax_convert_products'));
         add_action('wp_ajax_lipa_polepole_revert_products', array($this, 'ajax_revert_products'));
+
+        // Admin product fields
+        add_action('woocommerce_product_options_pricing', array($this, 'add_custom_price_field'));
+        add_action('woocommerce_process_product_meta', array($this, 'save_custom_price_field'));
+        add_action('woocommerce_variation_options_pricing', array($this, 'add_variation_price_field'), 10, 3);
+        add_action('woocommerce_save_product_variation', array($this, 'save_variation_price_field'), 10, 2);
+
+        // REST API support
+        add_action('rest_api_init', array($this, 'register_rest_fields'));
     }
 
     // Add admin menu
@@ -105,55 +114,145 @@ class Simple_Calculator_Plugin {
         ));
 
         ?>
-        <div class="wrap">
-            <h1>Lipa Polepole Calculator Settings</h1>
+        <style>
+        .lipa-polepole-settings-wrap {
+            max-width: 1200px;
+        }
+        .lipa-settings-card {
+            background: #fff;
+            padding: 25px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .lipa-settings-card h2 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2271b1;
+            color: #2271b1;
+        }
+        .lipa-settings-card p.description {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .category-selection-wrapper {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+        }
+        .category-selection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+        }
+        .category-selection-header .button {
+            margin-left: 10px;
+        }
+        .category-item {
+            margin: 8px 0;
+            padding: 8px;
+            background: #fff;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .category-item:hover {
+            background: #f0f7ff;
+        }
+        .category-item label {
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+        .category-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .category-child {
+            margin-left: 30px;
+            border-left: 2px solid #e0e0e0;
+            padding-left: 15px;
+        }
+        .category-count {
+            color: #666;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        </style>
+
+        <div class="wrap lipa-polepole-settings-wrap">
+            <h1>🧮 Lipa Polepole Calculator Settings</h1>
+            <p style="font-size: 16px; color: #666; margin-bottom: 30px;">Configure your payment calculator settings, categories, and pricing options.</p>
 
             <form method="post" action="">
                 <?php wp_nonce_field('lipa_polepole_settings_nonce'); ?>
 
                 <!-- Category Selection -->
-                <h2>Product Categories</h2>
-                <p>Select the categories where the calculator should appear:</p>
-                <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
-                    <?php
-                    if (!empty($categories)) {
-                        $this->render_category_checkboxes($categories, $selected_categories);
-                    } else {
-                        echo '<p>No categories found.</p>';
-                    }
-                    ?>
+                <div class="lipa-settings-card">
+                    <h2>📁 Product Categories</h2>
+                    <p class="description">Select the categories where the Lipa Polepole calculator should appear. Only products in these categories will show the payment calculator.</p>
+
+                    <div class="category-selection-header">
+                        <strong>Select Categories:</strong>
+                        <div>
+                            <button type="button" class="button" id="selectAllCategories">Select All</button>
+                            <button type="button" class="button" id="deselectAllCategories">Deselect All</button>
+                        </div>
+                    </div>
+
+                    <div class="category-selection-wrapper">
+                        <?php
+                        if (!empty($categories)) {
+                            $this->render_category_checkboxes($categories, $selected_categories);
+                        } else {
+                            echo '<p>No categories found.</p>';
+                        }
+                        ?>
+                    </div>
                 </div>
 
                 <!-- WhatsApp Number -->
-                <h2>WhatsApp Number</h2>
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="lipa_polepole_whatsapp">WhatsApp Number</label>
-                        </th>
-                        <td>
-                            <input type="text"
-                                   id="lipa_polepole_whatsapp"
-                                   name="lipa_polepole_whatsapp"
-                                   value="<?php echo esc_attr($whatsapp); ?>"
-                                   class="regular-text"
-                                   placeholder="254726166061">
-                            <p class="description">Enter WhatsApp number with country code (e.g., 254726166061)</p>
-                        </td>
-                    </tr>
-                </table>
+                <div class="lipa-settings-card">
+                    <h2>💬 WhatsApp Number</h2>
+                    <p class="description">Enter your WhatsApp business number (with country code). Customers will use this to complete their orders.</p>
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="lipa_polepole_whatsapp">WhatsApp Number</label>
+                            </th>
+                            <td>
+                                <input type="text"
+                                       id="lipa_polepole_whatsapp"
+                                       name="lipa_polepole_whatsapp"
+                                       value="<?php echo esc_attr($whatsapp); ?>"
+                                       class="regular-text"
+                                       placeholder="254726166061"
+                                       style="font-size: 16px;">
+                                <p class="description">Format: Country code + number (e.g., 254726166061 for Kenya)</p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
 
                 <!-- Payment Plans -->
-                <h2>Payment Plans</h2>
-                <p>Configure your payment plans:</p>
-                <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
-                    <table class="widefat" style="margin-bottom: 15px;">
-                        <thead>
+                <div class="lipa-settings-card">
+                    <h2>📊 Payment Plans</h2>
+                    <p class="description">Configure flexible payment plans for your customers. Each plan defines the duration, interest rate, and required deposit percentage.</p>
+                    <table class="widefat" style="margin-bottom: 15px; border: 1px solid #ddd;">
+                        <thead style="background: #f5f5f5;">
                             <tr>
-                                <th>Weeks</th>
-                                <th>Interest (%)</th>
-                                <th>Deposit (%)</th>
-                                <th>Action</th>
+                                <th style="padding: 12px;">Weeks</th>
+                                <th style="padding: 12px;">Interest (%)</th>
+                                <th style="padding: 12px;">Deposit (%)</th>
+                                <th style="padding: 12px;">Action</th>
                             </tr>
                         </thead>
                         <tbody id="payment-plans-tbody">
@@ -189,22 +288,22 @@ class Simple_Calculator_Plugin {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
-                    <button type="button" class="button" onclick="addPaymentPlan()">Add Payment Plan</button>
+                    <button type="button" class="button" onclick="addPaymentPlan()" style="margin-top: 10px;">➕ Add Payment Plan</button>
                 </div>
 
-                <p class="submit">
+                <p class="submit" style="text-align: center; padding: 20px; background: #f9f9f9; border-radius: 8px; margin-top: 30px;">
                     <input type="submit"
                            name="lipa_polepole_save_settings"
-                           class="button button-primary"
-                           value="Save Settings">
+                           class="button button-primary button-hero"
+                           value="💾 Save All Settings"
+                           style="font-size: 18px; padding: 10px 40px;">
                 </p>
             </form>
 
             <!-- Bulk Conversion Section -->
-            <hr style="margin: 30px 0;">
-            <h2>Bulk Price Conversion</h2>
-            <p>Convert existing products in selected categories to show deposit prices (40% of full price).</p>
-            <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+            <div class="lipa-settings-card" style="border-left: 4px solid #ff9800;">
+                <h2>🔄 Bulk Price Conversion</h2>
+                <p class="description">Convert existing products in selected categories to show deposit prices (40% of full price). This will update all products at once.</p>
                 <button type="button" id="convertProductsBtn" class="button button-secondary">
                     Convert Products in Selected Categories
                 </button>
@@ -217,29 +316,30 @@ class Simple_Calculator_Plugin {
             </div>
 
             <!-- Revert Section -->
-            <h2>Revert Prices</h2>
-            <p>Restore original prices for products in selected categories.</p>
-            <div style="background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
-                <p><strong>Select categories to revert:</strong></p>
-                <div style="margin: 15px 0;">
+            <div class="lipa-settings-card" style="border-left: 4px solid #f44336;">
+                <h2>↩️ Revert Prices</h2>
+                <p class="description">Restore original full prices for products in selected categories. This will undo the deposit pricing conversion.</p>
+
+                <div class="category-selection-wrapper" style="max-height: 300px;">
+                    <p style="margin-bottom: 15px;"><strong>Select categories to revert:</strong></p>
                     <?php
                     if (!empty($categories)) {
                         foreach ($categories as $category) {
                             if ($category->parent == 0) {
-                                echo '<div style="margin: 5px 0;">';
+                                echo '<div class="category-item">';
                                 echo '<label>';
                                 echo '<input type="checkbox" class="revert-category" value="' . esc_attr($category->term_id) . '"> ';
-                                echo esc_html($category->name) . ' (' . $category->count . ' products)';
+                                echo '<strong>' . esc_html($category->name) . '</strong> <span class="category-count">(' . $category->count . ' products)</span>';
                                 echo '</label>';
                                 echo '</div>';
 
                                 // Render child categories
                                 foreach ($categories as $child_cat) {
                                     if ($child_cat->parent == $category->term_id) {
-                                        echo '<div style="margin: 5px 0 5px 30px;">';
+                                        echo '<div class="category-item category-child">';
                                         echo '<label>';
                                         echo '<input type="checkbox" class="revert-category" value="' . esc_attr($child_cat->term_id) . '"> ';
-                                        echo esc_html($child_cat->name) . ' (' . $child_cat->count . ' products)';
+                                        echo esc_html($child_cat->name) . ' <span class="category-count">(' . $child_cat->count . ' products)</span>';
                                         echo '</label>';
                                         echo '</div>';
                                     }
@@ -263,6 +363,19 @@ class Simple_Calculator_Plugin {
 
         <script>
         var planIndex = <?php echo count($payment_plans); ?>;
+
+        // Select All / Deselect All functionality
+        document.getElementById('selectAllCategories').addEventListener('click', function() {
+            document.querySelectorAll('input[name="lipa_polepole_categories[]"]').forEach(function(checkbox) {
+                checkbox.checked = true;
+            });
+        });
+
+        document.getElementById('deselectAllCategories').addEventListener('click', function() {
+            document.querySelectorAll('input[name="lipa_polepole_categories[]"]').forEach(function(checkbox) {
+                checkbox.checked = false;
+            });
+        });
 
         function addPaymentPlan() {
             var tbody = document.getElementById('payment-plans-tbody');
@@ -404,13 +517,17 @@ class Simple_Calculator_Plugin {
         foreach ($categories as $category) {
             if ($category->parent == $parent) {
                 $checked = in_array($category->term_id, $selected_categories) ? 'checked' : '';
-                $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $level);
+                $child_class = $level > 0 ? ' category-child' : '';
 
-                echo '<div style="margin: 5px 0;">';
-                echo $indent;
+                echo '<div class="category-item' . $child_class . '">';
                 echo '<label>';
                 echo '<input type="checkbox" name="lipa_polepole_categories[]" value="' . esc_attr($category->term_id) . '" ' . $checked . '> ';
-                echo esc_html($category->name) . ' (' . $category->count . ' products)';
+                if ($level == 0) {
+                    echo '<strong>' . esc_html($category->name) . '</strong>';
+                } else {
+                    echo esc_html($category->name);
+                }
+                echo ' <span class="category-count">(' . $category->count . ' products)</span>';
                 echo '</label>';
                 echo '</div>';
 
@@ -1495,6 +1612,208 @@ class Simple_Calculator_Plugin {
         ';
 
         return $calculator_html;
+    }
+
+    // Add custom price field in product admin (simple products)
+    public function add_custom_price_field() {
+        global $post;
+
+        // Only show for products in selected categories
+        if (!$this->should_show_calculator($post->ID)) {
+            return;
+        }
+
+        echo '<div class="options_group lipa-polepole-price-section">';
+        echo '<p style="padding: 10px; background: #e8f5e9; border-left: 4px solid #4caf50; margin: 10px 0;"><strong>Lipa Polepole Pricing</strong><br><small>Set the original full price. The deposit price (40%) will be calculated automatically.</small></p>';
+
+        woocommerce_wp_text_input(array(
+            'id' => '_lipa_polepole_full_price',
+            'label' => 'Original Full Price (KSh)',
+            'desc_tip' => true,
+            'description' => 'The original full price for this product. The regular price will be set to 40% of this value automatically.',
+            'type' => 'number',
+            'custom_attributes' => array(
+                'step' => '0.01',
+                'min' => '0'
+            ),
+            'value' => get_post_meta($post->ID, '_lipa_polepole_full_price', true)
+        ));
+
+        // Show calculated deposit price
+        $full_price = get_post_meta($post->ID, '_lipa_polepole_full_price', true);
+        if ($full_price && $full_price > 0) {
+            $deposit_price = $full_price * 0.40;
+            echo '<p class="form-field" style="padding-left: 12px; color: #2271b1;"><strong>Calculated Deposit Price: KSh ' . number_format($deposit_price, 2) . '</strong></p>';
+        }
+
+        echo '</div>';
+    }
+
+    // Save custom price field (simple products)
+    public function save_custom_price_field($post_id) {
+        // Only process for products in selected categories
+        if (!$this->should_show_calculator($post_id)) {
+            return;
+        }
+
+        if (isset($_POST['_lipa_polepole_full_price'])) {
+            $full_price = floatval($_POST['_lipa_polepole_full_price']);
+
+            if ($full_price > 0) {
+                // Save the full price
+                update_post_meta($post_id, '_lipa_polepole_full_price', $full_price);
+
+                // Calculate and set the deposit price (40%)
+                $deposit_price = $full_price * 0.40;
+
+                $product = wc_get_product($post_id);
+                if ($product && !$product->is_type('variable')) {
+                    $product->set_regular_price($deposit_price);
+                    $product->set_price($deposit_price);
+                    $product->save();
+                }
+            }
+        }
+    }
+
+    // Add custom price field for variations
+    public function add_variation_price_field($loop, $variation_data, $variation) {
+        // Check if parent product is in selected categories
+        $parent_id = wp_get_post_parent_id($variation->ID);
+        if (!$this->should_show_calculator($parent_id)) {
+            return;
+        }
+
+        $full_price = get_post_meta($variation->ID, '_lipa_polepole_full_price', true);
+
+        echo '<div class="lipa-polepole-variation-price">';
+        echo '<p style="padding: 10px; background: #e8f5e9; border-left: 4px solid #4caf50; margin: 10px 0;"><strong>Lipa Polepole Pricing</strong></p>';
+
+        woocommerce_wp_text_input(array(
+            'id' => '_lipa_polepole_full_price_var[' . $loop . ']',
+            'name' => '_lipa_polepole_full_price_var[' . $loop . ']',
+            'label' => 'Original Full Price (KSh)',
+            'desc_tip' => true,
+            'description' => 'The original full price for this variation. The regular price will be set to 40% of this value.',
+            'type' => 'number',
+            'custom_attributes' => array(
+                'step' => '0.01',
+                'min' => '0'
+            ),
+            'value' => $full_price,
+            'wrapper_class' => 'form-row form-row-full'
+        ));
+
+        // Show calculated deposit price
+        if ($full_price && $full_price > 0) {
+            $deposit_price = $full_price * 0.40;
+            echo '<p class="form-row form-row-full" style="padding-left: 12px; color: #2271b1;"><strong>Calculated Deposit: KSh ' . number_format($deposit_price, 2) . '</strong></p>';
+        }
+
+        echo '</div>';
+    }
+
+    // Save custom price field for variations
+    public function save_variation_price_field($variation_id, $loop) {
+        // Check if parent product is in selected categories
+        $parent_id = wp_get_post_parent_id($variation_id);
+        if (!$this->should_show_calculator($parent_id)) {
+            return;
+        }
+
+        if (isset($_POST['_lipa_polepole_full_price_var'][$loop])) {
+            $full_price = floatval($_POST['_lipa_polepole_full_price_var'][$loop]);
+
+            if ($full_price > 0) {
+                // Save the full price
+                update_post_meta($variation_id, '_lipa_polepole_full_price', $full_price);
+
+                // Calculate and set the deposit price (40%)
+                $deposit_price = $full_price * 0.40;
+
+                $variation = wc_get_product($variation_id);
+                if ($variation) {
+                    $variation->set_regular_price($deposit_price);
+                    $variation->set_price($deposit_price);
+                    $variation->save();
+                }
+            }
+        }
+    }
+
+    // Register REST API fields
+    public function register_rest_fields() {
+        // Register field for products
+        register_rest_field('product', 'lipa_polepole_full_price', array(
+            'get_callback' => array($this, 'get_full_price_rest'),
+            'update_callback' => null,
+            'schema' => array(
+                'description' => 'Original full price for Lipa Polepole calculator',
+                'type' => 'number',
+                'context' => array('view', 'edit')
+            )
+        ));
+
+        // Register field for product variations
+        register_rest_field('product_variation', 'lipa_polepole_full_price', array(
+            'get_callback' => array($this, 'get_full_price_rest'),
+            'update_callback' => null,
+            'schema' => array(
+                'description' => 'Original full price for Lipa Polepole calculator',
+                'type' => 'number',
+                'context' => array('view', 'edit')
+            )
+        ));
+
+        // Add deposit price field as well
+        register_rest_field('product', 'lipa_polepole_deposit_price', array(
+            'get_callback' => array($this, 'get_deposit_price_rest'),
+            'update_callback' => null,
+            'schema' => array(
+                'description' => 'Calculated deposit price (40% of full price)',
+                'type' => 'number',
+                'context' => array('view', 'edit')
+            )
+        ));
+
+        register_rest_field('product_variation', 'lipa_polepole_deposit_price', array(
+            'get_callback' => array($this, 'get_deposit_price_rest'),
+            'update_callback' => null,
+            'schema' => array(
+                'description' => 'Calculated deposit price (40% of full price)',
+                'type' => 'number',
+                'context' => array('view', 'edit')
+            )
+        ));
+    }
+
+    // Get full price for REST API
+    public function get_full_price_rest($object, $field_name, $request) {
+        $product_id = $object['id'];
+
+        // Check if product is in selected categories
+        if (!$this->should_show_calculator($product_id)) {
+            return null;
+        }
+
+        $full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+        return $full_price ? floatval($full_price) : null;
+    }
+
+    // Get deposit price for REST API
+    public function get_deposit_price_rest($object, $field_name, $request) {
+        $product_id = $object['id'];
+
+        // Check if product is in selected categories
+        if (!$this->should_show_calculator($product_id)) {
+            return null;
+        }
+
+        $full_price = get_post_meta($product_id, '_lipa_polepole_full_price', true);
+        if ($full_price && $full_price > 0) {
+            return floatval($full_price) * 0.40;
+        }
+        return null;
     }
 }
 
