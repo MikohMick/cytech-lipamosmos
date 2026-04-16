@@ -975,6 +975,9 @@ class Simple_Calculator_Plugin {
 
         wp_enqueue_script('jquery');
 
+        // Enqueue plugin stylesheet
+        wp_enqueue_style('cytech-lipa-polepole', plugin_dir_url(__FILE__) . 'assets/css/calculator.css', array(), '3.0');
+
         // Pass settings to JavaScript
         wp_localize_script('jquery', 'lipaPolepoleSettings', array(
             'whatsapp' => $whatsapp,
@@ -1245,7 +1248,7 @@ class Simple_Calculator_Plugin {
         ');
 
         // Inline CSS
-        wp_add_inline_style('wp-block-library', '
+        wp_add_inline_style('cytech-lipa-polepole', '
         .simple-calculator {
             max-width: 400px;
             margin: 20px 0;
@@ -1261,14 +1264,13 @@ class Simple_Calculator_Plugin {
             width: 100%;
             padding: 15px;
             margin-bottom: 20px;
-            border: 1px solid #ccc;
+            border: none;
             border-radius: 6px;
             font-size: 16px;
             box-sizing: border-box;
             background: #007cba;
             color: white;
             cursor: pointer;
-            border: none;
             transition: background 0.3s ease;
             font-weight: bold;
         }
@@ -1379,7 +1381,7 @@ class Simple_Calculator_Plugin {
 
         .modal-plan-section select {
             width: 100%;
-            padding: 5px;
+            padding: 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 16px;
@@ -1414,7 +1416,7 @@ class Simple_Calculator_Plugin {
 
         .modal-variation-section select {
             width: 100%;
-            padding: 5px;
+            padding: 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 16px;
@@ -1577,9 +1579,8 @@ class Simple_Calculator_Plugin {
         <!-- Modal -->
         <div id="paymentModal" class="payment-modal">
             <div class="modal-content">
+                <span id="closeModal" class="close-btn">&times;</span>
                 <div class="modal-scroll">
-                    <span id="closeModal" class="close-btn">&times;</span>
-
                     <div id="modalPlanSection" class="modal-plan-section">
                         <label for="simplePlan">Select Payment Plan:</label>
                         <select id="simplePlan">
