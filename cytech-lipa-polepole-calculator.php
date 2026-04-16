@@ -1381,17 +1381,22 @@ class Simple_Calculator_Plugin {
 
         .modal-plan-section select {
             width: 100%;
-            padding: 12px;
+            height: auto !important;
+            min-height: 48px;
+            padding: 12px 40px 12px 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 16px;
+            line-height: 1.5;
+            box-sizing: border-box;
             background: #fff;
             appearance: none;
+            -webkit-appearance: none;
             background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 4 5\\"><path fill=\\"%23666\\" d=\\"m0 1 2 2 2-2z\\"/></svg>");
             background-repeat: no-repeat;
             background-position: right 12px center;
             background-size: 12px;
-            padding-right: 40px;
+            color: #333;
         }
 
         .modal-plan-section select:focus {
@@ -1416,17 +1421,22 @@ class Simple_Calculator_Plugin {
 
         .modal-variation-section select {
             width: 100%;
-            padding: 12px;
+            height: auto !important;
+            min-height: 48px;
+            padding: 12px 40px 12px 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 16px;
+            line-height: 1.5;
+            box-sizing: border-box;
             background: #fff;
             appearance: none;
+            -webkit-appearance: none;
             background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 4 5\\"><path fill=\\"%23666\\" d=\\"m0 1 2 2 2-2z\\"/></svg>");
             background-repeat: no-repeat;
             background-position: right 12px center;
             background-size: 12px;
-            padding-right: 40px;
+            color: #333;
         }
 
         .modal-variation-section select:focus {
